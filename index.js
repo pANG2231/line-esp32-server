@@ -1,24 +1,46 @@
 import express from "express";
+import fetch from "node-fetch";
 
 const app = express();
 app.use(express.json());
 
-// หน้า root เอาไว้เช็กว่า server ทำงาน
-app.get("/", (req, res) => {
-  res.send("Server OK");
-});
+const LINE_TOKEN = process.env.LINE_TOKEN;
+let latest = {};
 
-// === LINE Webhook ===
+// ===== Webhook (LINE Verify ต้อง 200) =====
 app.post("/webhook", (req, res) => {
-  console.log("LINE webhook received");
-  console.log(JSON.stringify(req.body, null, 2));
-
-  // ต้องตอบ 200 กลับไปเสมอ
   res.status(200).send("OK");
 });
 
-// Render ใช้ PORT จาก env
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+// ===== รับข้อมูลจาก ESP32 =====
+app.post("/esp32", async (req, res) => {
+  latest = req.body;
+
+  const msg =
+`📊 รายงานคุณภาพน้ำ
+🌡 Temp: ${latest.temp} °C
+🧪 pH: ${latest.ph}
+💧 TDS: ${latest.tds} ppm
+📏 Level: ${latest.level} cm`;
+
+  await pushLine(msg);
+  res.send("OK");
 });
+
+// ===== ส่ง LINE =====
+async function pushLine(text) {
+  await fetch("https://api.line.me/v2/bot/message/broadcast", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${LINE_TOKEN}`
+    },
+    body: JSON.stringify({
+      messages: [{ type: "text", text }]
+    })
+  });
+}
+
+app.get("/", (req, res) => res.send("Server OK"));
+
+app.listen(3000, () => console.log("Server running"));
