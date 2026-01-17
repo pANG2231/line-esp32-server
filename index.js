@@ -1,46 +1,40 @@
-import express from "express";
-import fetch from "node-fetch";
+const express = require("express");
+const fetch = require("node-fetch");
 
 const app = express();
 app.use(express.json());
 
-const LINE_TOKEN = process.env.LINE_TOKEN;
-let latest = {};
+// ===== LINE CONFIG =====
+const LINE_TOKEN = SpLMnqfhoFTNzU6CfHlr9whdkHwE0MWQKhbYsFX632G/TILkSusfWDKA/VqgQ96SkCUROjfVADCGH/P82ylsZ2bOTfYCALeBkWuyiKgErJfXpXolIMjfzBWOJIOtOvNEkD29u/l4ZNZeVSAez/DyVQdB04t89/1O/w1cDnyilFU=;
+const GROUP_ID   = C7061447795097e88eb4b99734c7cfbaf;
 
-// ===== Webhook (LINE Verify ต้อง 200) =====
-app.post("/webhook", (req, res) => {
-  res.status(200).send("OK");
-});
-
-// ===== รับข้อมูลจาก ESP32 =====
-app.post("/esp32", async (req, res) => {
-  latest = req.body;
+// ===== Receive from ESP32 =====
+app.post("/report", async (req, res) => {
+  const { temp, ph, tds, level } = req.body;
 
   const msg =
 `📊 รายงานคุณภาพน้ำ
-🌡 Temp: ${latest.temp} °C
-🧪 pH: ${latest.ph}
-💧 TDS: ${latest.tds} ppm
-📏 Level: ${latest.level} cm`;
+🌡 Temp: ${temp} °C
+🧪 pH: ${ph}
+💧 TDS: ${tds} ppm
+📏 Level: ${level} cm`;
 
-  await pushLine(msg);
-  res.send("OK");
-});
-
-// ===== ส่ง LINE =====
-async function pushLine(text) {
-  await fetch("https://api.line.me/v2/bot/message/broadcast", {
+  await fetch("https://api.line.me/v2/bot/message/push", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${LINE_TOKEN}`
+      "Authorization": `Bearer ${LINE_TOKEN}`,
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      messages: [{ type: "text", text }]
+      to: GROUP_ID,
+      messages: [{ type: "text", text: msg }]
     })
   });
-}
 
+  res.status(200).send("OK");
+});
+
+// ===== Health Check =====
 app.get("/", (req, res) => res.send("Server OK"));
 
 app.listen(3000, () => console.log("Server running"));
