@@ -4,36 +4,59 @@ const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-// ===== LINE CONFIG =====
 const LINE_TOKEN = process.env.LINE_TOKEN;
 const GROUP_ID = process.env.GROUP_ID;
 
-// ===== STORE LAST AVERAGE =====
-let lastData = null;
+// ===== BUFFER =====
+let buffer5min = [];
+let buffer20min = [];
+let lastReport = Date.now();
 
-// ===== รับข้อมูลจาก ESP32 =====
-app.post("/data", async (req, res) => {
-  const { ph, tds, temp, level } = req.body;
+function avg(buffer) {
+  const sum = buffer.reduce(
+    (a, b) => ({
+      ph: a.ph + b.ph,
+      tds: a.tds + b.tds,
+      temp: a.temp + b.temp,
+      level: a.level + b.level
+    }),
+    { ph: 0, tds: 0, temp: 0, level: 0 }
+  );
 
-  lastData = {
-    ph, tds, temp, level,
-    time: new Date().toLocaleString("th-TH")
+  return {
+    ph: sum.ph / buffer.length,
+    tds: sum.tds / buffer.length,
+    temp: sum.temp / buffer.length,
+    level: sum.level / buffer.length
   };
+}
 
-  const message =
-`📊 Water Monitor (Avg 20 min)
-pH: ${ph.toFixed(2)}
-TDS: ${tds.toFixed(0)} ppm
-Temp: ${temp.toFixed(1)} °C
-Level: ${level.toFixed(1)} %
-🕒 ${lastData.time}`;
+// ===== ESP32 ส่งข้อมูล =====
+app.post("/data", async (req, res) => {
+  const data = req.body;
+  buffer5min.push(data);
+  buffer20min.push(data);
 
-  try {
+  if (buffer5min.length > 60) buffer5min.shift();
+  if (buffer20min.length > 240) buffer20min.shift();
+
+  // ===== ส่งอัตโนมัติทุก 20 นาที =====
+  if (Date.now() - lastReport >= 20 * 60 * 1000 && buffer20min.length >= 10) {
+    lastReport = Date.now();
+    const a = avg(buffer20min);
+
+    const msg =
+`📊 รายงานอัตโนมัติ (20 นาที)
+pH: ${a.ph.toFixed(2)}
+TDS: ${a.tds.toFixed(0)} ppm
+Temp: ${a.temp.toFixed(1)} °C
+Level: ${a.level.toFixed(1)} %`;
+
     await axios.post(
       "https://api.line.me/v2/bot/message/push",
       {
         to: GROUP_ID,
-        messages: [{ type: "text", text: message }]
+        messages: [{ type: "text", text: msg }]
       },
       {
         headers: {
@@ -42,42 +65,39 @@ Level: ${level.toFixed(1)} %
         }
       }
     );
-    res.send("OK");
-  } catch (err) {
-    console.error(err.response?.data || err);
-    res.status(500).send("LINE ERROR");
+
+    buffer20min = [];
   }
+
+  res.send("OK");
 });
 
-// ===== รับ Webhook จาก LINE =====
+// ===== LINE Webhook =====
 app.post("/webhook", async (req, res) => {
   const event = req.body.events?.[0];
   if (!event) return res.send("OK");
 
-  // รับเฉพาะข้อความ
   if (event.type === "message" && event.message.type === "text") {
-    const text = event.message.text.trim().toLowerCase();
+    if (event.message.text.trim().toLowerCase() === "status") {
+      let reply;
 
-    if (text === "status") {
-      let replyText;
-
-      if (lastData) {
-        replyText =
-`📌 Last Status
-pH: ${lastData.ph.toFixed(2)}
-TDS: ${lastData.tds.toFixed(0)} ppm
-Temp: ${lastData.temp.toFixed(1)} °C
-Level: ${lastData.level.toFixed(1)} %
-🕒 ${lastData.time}`;
+      if (buffer5min.length >= 5) {
+        const a = avg(buffer5min);
+        reply =
+`📌 Status (เฉลี่ย 5 นาที)
+pH: ${a.ph.toFixed(2)}
+TDS: ${a.tds.toFixed(0)} ppm
+Temp: ${a.temp.toFixed(1)} °C
+Level: ${a.level.toFixed(1)} %`;
       } else {
-        replyText = "⚠️ ยังไม่มีข้อมูลจาก ESP32";
+        reply = "⚠️ ข้อมูลยังไม่ครบ 5 นาที";
       }
 
       await axios.post(
         "https://api.line.me/v2/bot/message/reply",
         {
           replyToken: event.replyToken,
-          messages: [{ type: "text", text: replyText }]
+          messages: [{ type: "text", text: reply }]
         },
         {
           headers: {
@@ -88,10 +108,7 @@ Level: ${lastData.level.toFixed(1)} %
       );
     }
   }
-
   res.send("OK");
 });
 
-app.listen(3000, () => {
-  console.log("Server running (Webhook + Data)");
-});
+app.listen(3000, () => console.log("Server running"));
