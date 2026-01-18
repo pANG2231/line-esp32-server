@@ -2,54 +2,51 @@ import express from "express";
 import fetch from "node-fetch";
 
 const app = express();
-app.use(express.json());
+app.use(express.json()); // สำคัญมาก
 
-const LINE_TOKEN = process.env.LINE_TOKEN;
-const LINE_USER_ID = process.env.LINE_USER_ID;
+const PORT = process.env.PORT || 3000;
+const LINE_TOKEN = process.env.LINE_TOKEN; // Channel Access Token
 
-app.get("/", (req, res) => {
-  res.send("LINE ESP32 Server OK");
+/* =========================
+   LINE WEBHOOK (สำคัญ)
+   ========================= */
+app.post("/webhook", (req, res) => {
+  console.log("LINE webhook received");
+  res.status(200).send("OK");
 });
 
+/* =========================
+   ESP32 → เรียกส่งข้อความ
+   ========================= */
 app.post("/notify", async (req, res) => {
+  const { message } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: "No message" });
+  }
+
   try {
-    const { message } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: "message missing" });
-    }
+    const lineRes = await fetch("https://api.line.me/v2/bot/message/broadcast", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${LINE_TOKEN}`
+      },
+      body: JSON.stringify({
+        messages: [{ type: "text", text: message }]
+      })
+    });
 
-    const payload = {
-      to: LINE_USER_ID,
-      messages: [
-        {
-          type: "text",
-          text: message
-        }
-      ]
-    };
+    const data = await lineRes.text();
+    console.log("LINE response:", data);
 
-    const lineRes = await fetch(
-      "https://api.line.me/v2/bot/message/push",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${LINE_TOKEN}`
-        },
-        body: JSON.stringify(payload)
-      }
-    );
-
-    const text = await lineRes.text();
-    res.status(200).send(text);
-
+    res.json({ status: "ok" });
   } catch (err) {
     console.error(err);
-    res.status(500).send("LINE ERROR");
+    res.status(500).json({ error: "LINE send failed" });
   }
 });
 
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Server running on port", PORT);
 });
