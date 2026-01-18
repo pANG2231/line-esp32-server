@@ -1,6 +1,4 @@
 {
-  "name": "esp32-line-avg",
-  "version": "1.0.0",
   "dependencies": {
     "express": "^4.18.2",
     "axios": "^1.6.0"
