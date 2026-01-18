@@ -1,57 +1,43 @@
 const express = require("express");
 const axios = require("axios");
-const cors = require("cors");
 
 const app = express();
-app.use(cors());
 app.use(express.json());
 
-// ===== CONFIG =====
-const LINE_TOKEN = process.env.LINE_TOKEN;   // ใส่ใน Render Env
-const GROUP_ID   = process.env.GROUP_ID;     // ใส่ใน Render Env
+const LINE_TOKEN = process.env.LINE_TOKEN;
+const GROUP_ID = process.env.GROUP_ID;
 
-// ===== Health Check =====
-app.get("/", (req, res) => {
-  res.send("LINE ESP32 Server is running ✅");
-});
+app.post("/data", async (req, res) => {
+  const { ph, tds, temp, level } = req.body;
 
-// ===== ESP32 ส่งมา =====
-app.post("/notify", async (req, res) => {
-  const message = req.body.message;
-
-  if (!message) {
-    return res.status(400).json({ error: "No message" });
-  }
+  const message =
+`📊 Water Monitor (Avg 20 min)
+pH: ${ph.toFixed(2)}
+TDS: ${tds.toFixed(0)} ppm
+Temp: ${temp.toFixed(1)} °C
+Level: ${level.toFixed(1)} %`;
 
   try {
     await axios.post(
       "https://api.line.me/v2/bot/message/push",
       {
         to: GROUP_ID,
-        messages: [
-          {
-            type: "text",
-            text: message
-          }
-        ]
+        messages: [{ type: "text", text: message }]
       },
       {
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${LINE_TOKEN}`
+          Authorization: `Bearer ${LINE_TOKEN}`,
+          "Content-Type": "application/json"
         }
       }
     );
-
-    res.json({ status: "sent" });
+    res.send("OK");
   } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "LINE send failed" });
+    console.error(err.response?.data || err);
+    res.status(500).send("LINE ERROR");
   }
 });
 
-// ===== PORT =====
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+app.listen(3000, () => {
+  console.log("Render server running");
 });
