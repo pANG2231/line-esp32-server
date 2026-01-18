@@ -1,14 +1,10 @@
 {
-  "name": "esp32-line-server",
+  "name": "line-esp32-server",
   "version": "1.0.0",
-  "description": "ESP32 + Blynk + LINE Messaging API via Render",
-  "main": "index.js",
   "type": "module",
+  "main": "index.js",
   "scripts": {
     "start": "node index.js"
-  },
-  "engines": {
-    "node": ">=18"
   },
   "dependencies": {
     "express": "^4.19.2",
