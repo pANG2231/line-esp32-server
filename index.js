@@ -1,42 +1,44 @@
 const express = require("express");
 const axios = require("axios");
-const app = express();
 
+const app = express();
 app.use(express.json());
 
-const LINE_TOKEN = process.env.LINE_TOKEN;
-const GROUP_ID   = process.env.GROUP_ID;
+const LINE_TOKEN = process.env.LINE_TOKEN; // Channel Access Token
+const GROUP_ID   = process.env.LINE_GROUP_ID;
 
-app.post("/data", async (req, res) => {
-  const { ph, tds, temp, level } = req.body;
+app.post("/report", async (req, res) => {
+  const { reason, ph, tds, temp, level } = req.body;
 
-  const time = new Date().toLocaleString("th-TH");
+  const message =
+`💧 Water Monitoring
+━━━━━━━━━━━━━━
+📌 ${reason}
+🌡 Temp : ${temp} °C
+🧪 pH   : ${ph}
+💦 TDS  : ${tds} ppm
+📏 Level: ${level} cm
+━━━━━━━━━━━━━━`;
 
-  const msg =
-`🚰 ระบบตรวจวัดคุณภาพน้ำ
-━━━━━━━━━━━━━━━━━━
-🧪 pH          : ${ph.toFixed(2)}
-💧 TDS         : ${tds.toFixed(0)} ppm
-🌡️ อุณหภูมิ    : ${temp.toFixed(1)} °C
-📏 ระดับน้ำ    : ${level.toFixed(1)} cm
-━━━━━━━━━━━━━━━━━━
-⏰ เวลา ${time}`;
-
-  await axios.post(
-    "https://api.line.me/v2/bot/message/push",
-    {
-      to: GROUP_ID,
-      messages: [{ type: "text", text: msg }]
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${LINE_TOKEN}`,
-        "Content-Type": "application/json"
+  try {
+    await axios.post(
+      "https://api.line.me/v2/bot/message/push",
+      {
+        to: GROUP_ID,
+        messages: [{ type: "text", text: message }]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${LINE_TOKEN}`,
+          "Content-Type": "application/json"
+        }
       }
-    }
-  );
-
-  res.send("OK");
+    );
+    res.send("OK");
+  } catch (err) {
+    console.error(err.response?.data || err.message);
+    res.status(500).send("LINE ERROR");
+  }
 });
 
-app.listen(3000, () => console.log("Server running"));
+app.listen(3000, () => console.log("LINE Messaging API Server Running"));
