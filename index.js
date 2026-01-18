@@ -4,8 +4,8 @@ import fetch from "node-fetch";
 const app = express();
 app.use(express.json());
 
-const LINE_TOKEN = process.env.LINE_TOKEN; // Channel Access Token
-const USER_ID = process.env.LINE_USER_ID;  // User / Group ID
+const LINE_TOKEN = process.env.LINE_TOKEN;
+const LINE_USER_ID = process.env.LINE_USER_ID;
 
 app.get("/", (req, res) => {
   res.send("LINE ESP32 Server OK");
@@ -14,9 +14,12 @@ app.get("/", (req, res) => {
 app.post("/notify", async (req, res) => {
   try {
     const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: "message missing" });
+    }
 
-    const body = {
-      to: USER_ID,
+    const payload = {
+      to: LINE_USER_ID,
       messages: [
         {
           type: "text",
@@ -25,26 +28,28 @@ app.post("/notify", async (req, res) => {
       ]
     };
 
-    const r = await fetch("https://api.line.me/v2/bot/message/push", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${LINE_TOKEN}`
-      },
-      body: JSON.stringify(body)
-    });
+    const lineRes = await fetch(
+      "https://api.line.me/v2/bot/message/push",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${LINE_TOKEN}`
+        },
+        body: JSON.stringify(payload)
+      }
+    );
 
-    const data = await r.text();
-    console.log("LINE:", data);
+    const text = await lineRes.text();
+    res.status(200).send(text);
 
-    res.json({ status: "ok" });
   } catch (err) {
     console.error(err);
-    res.status(500).send("error");
+    res.status(500).send("LINE ERROR");
   }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Server running on", PORT);
+  console.log("Server running on port", PORT);
 });
