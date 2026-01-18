@@ -1,52 +1,41 @@
-import express from "express";
-import fetch from "node-fetch";
+const express = require("express");
+const axios = require("axios");
 
 const app = express();
-app.use(express.json()); // สำคัญมาก
+app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
-const LINE_TOKEN = process.env.LINE_TOKEN; // Channel Access Token
+const LINE_TOKEN = process.env.LINE_TOKEN;
+const USER_ID = process.env.LINE_USER_ID;
 
-/* =========================
-   LINE WEBHOOK (สำคัญ)
-   ========================= */
-app.post("/webhook", (req, res) => {
-  console.log("LINE webhook received");
-  res.status(200).send("OK");
-});
+app.post("/report", async (req, res) => {
+  const { ph, tds, temp, water } = req.body;
 
-/* =========================
-   ESP32 → เรียกส่งข้อความ
-   ========================= */
-app.post("/notify", async (req, res) => {
-  const { message } = req.body;
-
-  if (!message) {
-    return res.status(400).json({ error: "No message" });
-  }
+  const message =
+`📊 รายงานค่าน้ำ (เฉลี่ย 20 นาที)
+pH: ${ph}
+TDS: ${tds} ppm
+Temp: ${temp} °C
+Water Level: ${water} cm`;
 
   try {
-    const lineRes = await fetch("https://api.line.me/v2/bot/message/broadcast", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${LINE_TOKEN}`
-      },
-      body: JSON.stringify({
+    await axios.post(
+      "https://api.line.me/v2/bot/message/push",
+      {
+        to: USER_ID,
         messages: [{ type: "text", text: message }]
-      })
-    });
-
-    const data = await lineRes.text();
-    console.log("LINE response:", data);
-
-    res.json({ status: "ok" });
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${LINE_TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+    res.send("OK");
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "LINE send failed" });
+    console.error(err.response?.data || err.message);
+    res.status(500).send("ERROR");
   }
 });
 
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
-});
+app.listen(3000, () => console.log("Server running on port 3000"));
