@@ -1,44 +1,64 @@
-const express = require("express");
-const axios = require("axios");
+import express from "express";
+import fetch from "node-fetch";
 
 const app = express();
 app.use(express.json());
 
-const LINE_TOKEN = process.env.LINE_TOKEN; // Channel Access Token
-const GROUP_ID   = process.env.LINE_GROUP_ID;
+const LINE_TOKEN = process.env.LINE_CHANNEL_TOKEN;
+const LINE_USER_ID = process.env.LINE_USER_ID;
 
-app.post("/report", async (req, res) => {
-  const { reason, ph, tds, temp, level } = req.body;
+/* ===== HEALTH CHECK ===== */
+app.get("/", (req, res) => {
+  res.send("✅ LINE ESP32 Server is running");
+});
 
-  const message =
-`💧 Water Monitoring
-━━━━━━━━━━━━━━
-📌 ${reason}
-🌡 Temp : ${temp} °C
-🧪 pH   : ${ph}
-💦 TDS  : ${tds} ppm
-📏 Level: ${level} cm
-━━━━━━━━━━━━━━`;
-
+/* ===== RECEIVE FROM ESP32 ===== */
+app.post("/notify", async (req, res) => {
   try {
-    await axios.post(
-      "https://api.line.me/v2/bot/message/push",
-      {
-        to: GROUP_ID,
-        messages: [{ type: "text", text: message }]
+    const {
+      title,
+      temp,
+      tds,
+      ph,
+      dist
+    } = req.body;
+
+    const message =
+`━━━━━━━━━━━━━━
+📡 ${title}
+━━━━━━━━━━━━━━
+🌡 อุณหภูมิ : ${temp.toFixed(1)} °C
+💧 TDS        : ${tds.toFixed(0)} ppm
+⚗ pH         : ${ph.toFixed(2)}
+📏 ระดับน้ำ  : ${dist.toFixed(1)} cm
+━━━━━━━━━━━━━━
+⏱ ${new Date().toLocaleString("th-TH")}
+`;
+
+    await fetch("https://api.line.me/v2/bot/message/push", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${LINE_TOKEN}`
       },
-      {
-        headers: {
-          Authorization: `Bearer ${LINE_TOKEN}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-    res.send("OK");
+      body: JSON.stringify({
+        to: LINE_USER_ID,
+        messages: [
+          {
+            type: "text",
+            text: message
+          }
+        ]
+      })
+    });
+
+    res.json({ status: "ok" });
   } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).send("LINE ERROR");
+    console.error(err);
+    res.status(500).json({ status: "error" });
   }
 });
 
-app.listen(3000, () => console.log("LINE Messaging API Server Running"));
+app.listen(3000, () => {
+  console.log("🚀 Server running on port 3000");
+});
